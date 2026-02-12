@@ -1,0 +1,79 @@
+# -----------------------------
+# Python
+# -----------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+*.sqlite3
+
+# Virtual Environment
+venv/
+env/
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# -----------------------------
+# TensorFlow / Keras
+# -----------------------------
+*.h5
+saved_model/
+checkpoint/
+checkpoints/
+*.pb
+*.tflite
+
+# TensorBoard logs
+logs/
+tensorboard/
+
+# -----------------------------
+# Training Artifacts
+# -----------------------------
+*.ckpt
+*.ckpt.*
+*.log
+events.out.tfevents.*
+
+# -----------------------------
+# System / Cache / Temp Files
+# -----------------------------
+.DS_Store
+Thumbs.db
+*.tmp
+*.temp
+
+# -----------------------------
+# Datasets (optional)
+# Comment out if you want them in Git
+# -----------------------------
+train/
+test/
+dataset/
+data/
+*.zip
+
+# -----------------------------
+# IDE / Editor Files
+# -----------------------------
+# VSCode
+.vscode/
+
+# PyCharm
+.idea/
+
+# -----------------------------
+# Project-specific
+# -----------------------------
+# Pip cache
+pip-wheel-metadata/
+pip-log.txt
+
+# OpenCV temp files
+__opencv_cache__/
+
+# Model logs or outputs
+output/
+results/
