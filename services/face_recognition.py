@@ -1,4 +1,4 @@
-from deepface import DeepFace
+from deepface import DeepFace # pyright: ignore[reportMissingImports]
 
 DB_PATH = "data/known_faces"
 
