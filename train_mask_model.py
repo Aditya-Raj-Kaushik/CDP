@@ -1,78 +1,96 @@
 import os
-import numpy as np
-import matplotlib.pyplot as plt
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.applications import MobileNetV2
-from tensorflow.keras.layers import Dense, Flatten, Dropout
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
 from tensorflow.keras.models import Model
+from tensorflow.keras.callbacks import EarlyStopping
 
-# Paths
-DATASET_PATH = "data/mask_dataset"
+# =========================
+# PATH
+# =========================
+DATASET_PATH = "data/mask_dataset/images"
 
-# Parameters
 IMG_SIZE = 224
 BATCH_SIZE = 32
-EPOCHS = 5
+EPOCHS = 15
 
-# Data Generator
+# =========================
+# DATA AUGMENTATION (STRONG)
+# =========================
 datagen = ImageDataGenerator(
     rescale=1./255,
-    validation_split=0.2,
-    rotation_range=20,
-    zoom_range=0.15,
-    shear_range=0.15,
-    horizontal_flip=True
+    rotation_range=40,
+    zoom_range=0.4,
+    shear_range=0.3,
+    horizontal_flip=True,
+    brightness_range=[0.6, 1.4]
 )
 
 train_data = datagen.flow_from_directory(
     DATASET_PATH,
     target_size=(IMG_SIZE, IMG_SIZE),
     batch_size=BATCH_SIZE,
-    subset="training"
+    class_mode="binary"
 )
 
-val_data = datagen.flow_from_directory(
-    DATASET_PATH,
-    target_size=(IMG_SIZE, IMG_SIZE),
-    batch_size=BATCH_SIZE,
-    subset="validation"
-)
-
-# Base Model
+# =========================
+# MODEL
+# =========================
 base_model = MobileNetV2(
     input_shape=(IMG_SIZE, IMG_SIZE, 3),
     include_top=False,
     weights="imagenet"
 )
 
-base_model.trainable = False
+# 🔥 Fine-tuning (IMPORTANT)
+for layer in base_model.layers[:-30]:
+    layer.trainable = False
 
-# Custom Head
+# Head
 x = base_model.output
-x = Flatten()(x)
+x = GlobalAveragePooling2D()(x)
 x = Dense(128, activation="relu")(x)
 x = Dropout(0.5)(x)
 output = Dense(1, activation="sigmoid")(x)
 
 model = Model(inputs=base_model.input, outputs=output)
 
-# Compile
+# =========================
+# COMPILE
+# =========================
 model.compile(
-    optimizer="adam",
+    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
     loss="binary_crossentropy",
     metrics=["accuracy"]
 )
 
-# Train
+model.summary()
+
+# =========================
+# CALLBACKS
+# =========================
+callbacks = [
+    EarlyStopping(
+        monitor="loss",
+        patience=3,
+        restore_best_weights=True
+    )
+]
+
+# =========================
+# TRAIN
+# =========================
 history = model.fit(
     train_data,
-    validation_data=val_data,
-    epochs=EPOCHS
+    epochs=EPOCHS,
+    callbacks=callbacks
 )
 
-# Save
+# =========================
+# SAVE
+# =========================
 os.makedirs("models", exist_ok=True)
 model.save("models/mask_model.h5")
 
-print("Mask model saved!")
+print("✅ High-accuracy model saved!")
