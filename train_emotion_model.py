@@ -1,9 +1,9 @@
 import os
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout
-from tensorflow.keras.models import Sequential
+from tensorflow.keras.preprocessing.image import ImageDataGenerator # type: ignore
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout # type: ignore
+from tensorflow.keras.models import Sequential # type: ignore
 
 # Paths
 DATASET_PATH = "data/emotion_dataset/train"
@@ -72,4 +72,4 @@ model.fit(
 os.makedirs("models", exist_ok=True)
 model.save("models/emotion_model.h5")
 
-print("✅ Emotion model saved!")
+print("Emotion model saved!")
