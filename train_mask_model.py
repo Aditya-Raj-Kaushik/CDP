@@ -1,36 +1,44 @@
 import os
 import tensorflow as tf
-from tensorflow.keras.preprocessing.image import ImageDataGenerator# type: ignore
-from tensorflow.keras.applications import MobileNetV2# type: ignore
-from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout# type: ignore
-from tensorflow.keras.models import Model# type: ignore
-from tensorflow.keras.callbacks import EarlyStopping # type: ignore
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
+from tensorflow.keras.models import Model
+from tensorflow.keras.callbacks import EarlyStopping
 
 # =========================
 # PATH
 # =========================
-DATASET_PATH = "data/mask_dataset/images"
+DATASET_PATH = "data/mask_dataset"
 
 IMG_SIZE = 224
 BATCH_SIZE = 32
-EPOCHS = 15
+EPOCHS = 10
 
 # =========================
-# DATA AUGMENTATION (STRONG)
+# DATA GENERATOR
 # =========================
 datagen = ImageDataGenerator(
     rescale=1./255,
-    rotation_range=40,
-    zoom_range=0.4,
-    shear_range=0.3,
-    horizontal_flip=True,
-    brightness_range=[0.6, 1.4]
+    validation_split=0.2,   # quick split (ok for now)
+    rotation_range=30,
+    zoom_range=0.3,
+    horizontal_flip=True
 )
 
 train_data = datagen.flow_from_directory(
     DATASET_PATH,
     target_size=(IMG_SIZE, IMG_SIZE),
     batch_size=BATCH_SIZE,
+    subset="training",
+    class_mode="binary"
+)
+
+val_data = datagen.flow_from_directory(
+    DATASET_PATH,
+    target_size=(IMG_SIZE, IMG_SIZE),
+    batch_size=BATCH_SIZE,
+    subset="validation",
     class_mode="binary"
 )
 
@@ -43,11 +51,8 @@ base_model = MobileNetV2(
     weights="imagenet"
 )
 
-# 🔥 Fine-tuning (IMPORTANT)
-for layer in base_model.layers[:-30]:
-    layer.trainable = False
+base_model.trainable = False
 
-# Head
 x = base_model.output
 x = GlobalAveragePooling2D()(x)
 x = Dense(128, activation="relu")(x)
@@ -65,26 +70,16 @@ model.compile(
     metrics=["accuracy"]
 )
 
-model.summary()
-
-# =========================
-# CALLBACKS
-# =========================
-callbacks = [
-    EarlyStopping(
-        monitor="loss",
-        patience=3,
-        restore_best_weights=True
-    )
-]
-
 # =========================
 # TRAIN
 # =========================
 history = model.fit(
     train_data,
+    validation_data=val_data,
     epochs=EPOCHS,
-    callbacks=callbacks
+    callbacks=[
+        EarlyStopping(patience=3, restore_best_weights=True)
+    ]
 )
 
 # =========================
@@ -93,4 +88,4 @@ history = model.fit(
 os.makedirs("models", exist_ok=True)
 model.save("models/mask_model.h5")
 
-print("✅ High-accuracy model saved!")
+print("Mask model trained successfully!")
