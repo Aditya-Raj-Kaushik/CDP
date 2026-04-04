@@ -1,75 +1,115 @@
 import os
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.preprocessing.image import ImageDataGenerator # type: ignore
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense, Dropout # type: ignore
-from tensorflow.keras.models import Sequential # type: ignore
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
+from tensorflow.keras.models import Model
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from sklearn.utils.class_weight import compute_class_weight
 
-# Paths
-DATASET_PATH = "data/emotion_dataset/train"
+# =========================
+DATASET_PATH = "data/emotion_dataset"
 
-# Parameters
-IMG_SIZE = 48
+IMG_SIZE = 224
 BATCH_SIZE = 32
 EPOCHS = 10
 
-# Data Generator
+# =========================
+# DATA GENERATOR
+# =========================
 datagen = ImageDataGenerator(
     rescale=1./255,
-    validation_split=0.2
+    validation_split=0.2,
+    rotation_range=20,
+    zoom_range=0.2,
+    width_shift_range=0.1,
+    height_shift_range=0.1,
+    horizontal_flip=True
 )
 
 train_data = datagen.flow_from_directory(
     DATASET_PATH,
     target_size=(IMG_SIZE, IMG_SIZE),
-    color_mode="grayscale",
     batch_size=BATCH_SIZE,
+    subset="training",
     class_mode="categorical",
-    subset="training"
+    color_mode="rgb"
 )
 
 val_data = datagen.flow_from_directory(
     DATASET_PATH,
     target_size=(IMG_SIZE, IMG_SIZE),
-    color_mode="grayscale",
     batch_size=BATCH_SIZE,
+    subset="validation",
     class_mode="categorical",
-    subset="validation"
+    color_mode="rgb"
 )
 
-# Model
-model = Sequential([
-    Conv2D(32, (3,3), activation='relu', input_shape=(48,48,1)),
-    MaxPooling2D(2,2),
+# =========================
+# CLASS WEIGHTS
+# =========================
+class_weights = compute_class_weight(
+    class_weight="balanced",
+    classes=np.unique(train_data.classes),
+    y=train_data.classes
+)
+class_weights = dict(enumerate(class_weights))
 
-    Conv2D(64, (3,3), activation='relu'),
-    MaxPooling2D(2,2),
+print("Class Weights:", class_weights)
 
-    Conv2D(128, (3,3), activation='relu'),
-    MaxPooling2D(2,2),
+# =========================
+# MODEL (TRANSFER LEARNING)
+# =========================
+base_model = MobileNetV2(
+    input_shape=(IMG_SIZE, IMG_SIZE, 3),
+    include_top=False,
+    weights="imagenet"
+)
 
-    Flatten(),
-    Dense(128, activation='relu'),
-    Dropout(0.5),
-    Dense(7, activation='softmax')
-])
+for layer in base_model.layers[:-20]:
+    layer.trainable = False
 
-# Compile
+x = base_model.output
+x = GlobalAveragePooling2D()(x)
+x = Dense(256, activation="relu")(x)
+x = Dropout(0.5)(x)
+output = Dense(7, activation="softmax")(x)
+
+model = Model(inputs=base_model.input, outputs=output)
+
+# =========================
+# COMPILE
+# =========================
 model.compile(
-    optimizer='adam',
-    loss='categorical_crossentropy',
-    metrics=['accuracy']
+    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
+    loss="categorical_crossentropy",
+    metrics=["accuracy"]
 )
 
-# Train
-model.fit(
+# =========================
+# CALLBACKS
+# =========================
+callbacks = [
+    EarlyStopping(patience=3, restore_best_weights=True),
+    ReduceLROnPlateau(factor=0.3, patience=2)
+]
+
+# =========================
+# TRAIN
+# =========================
+history = model.fit(
     train_data,
     validation_data=val_data,
-    epochs=EPOCHS
+    epochs=EPOCHS,
+    class_weight=class_weights,
+    callbacks=callbacks
 )
 
-# Save
+# =========================
+# SAVE
+# =========================
 os.makedirs("models", exist_ok=True)
-model.save("models/emotion_model.h5")
+model.save("models/emotion_model.keras")
 
 print("Emotion model saved!")
