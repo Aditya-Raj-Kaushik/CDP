@@ -1,4 +1,14 @@
 import cv2
+import os
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
+os.environ["TF_ENABLE_ONEDNN_OPTS"] = "0"  # optional: hides the oneDNN log
+
+from utils.face_detector import detect_faces
+from services.face_recognition import recognize_face
+from services.mask_detection import predict_mask
+from services.emotion_detection import predict_emotion
+
+import cv2
 from utils.face_detector import detect_faces
 from services.face_recognition import recognize_face
 from services.mask_detection import predict_mask
