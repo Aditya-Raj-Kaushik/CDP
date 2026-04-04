@@ -1,11 +1,11 @@
 import os
 import numpy as np
 import tensorflow as tf
-from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras.applications import MobileNetV2
-from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
-from tensorflow.keras.models import Model
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from tensorflow.keras.preprocessing.image import ImageDataGenerator # type: ignore
+from tensorflow.keras.applications import MobileNetV2 # type: ignore
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout # type: ignore
+from tensorflow.keras.models import Model # type: ignore
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau # type: ignore
 from sklearn.utils.class_weight import compute_class_weight
 from PIL import Image
 
@@ -20,7 +20,7 @@ BATCH_SIZE = 32
 EPOCHS = 10
 
 # =========================
-# CLEAN DATASET
+# 🧹 CLEAN DATASET
 # =========================
 print("🔍 Checking dataset...")
 
@@ -77,6 +77,11 @@ class_weights = compute_class_weight(
 )
 
 class_weights = dict(enumerate(class_weights))
+
+# Optional: cap extreme imbalance
+for k in class_weights:
+    class_weights[k] = min(class_weights[k], 5.0)
+
 print("Class Weights:", class_weights)
 
 # =========================
@@ -97,7 +102,7 @@ x = base_model.output
 x = GlobalAveragePooling2D()(x)
 x = Dense(256, activation="relu")(x)
 x = Dropout(0.5)(x)
-output = Dense(7, activation="softmax")  # 7 classes
+output = Dense(7, activation="softmax")(x)  # ✅ FIXED
 
 model = Model(inputs=base_model.input, outputs=output)
 
@@ -140,9 +145,21 @@ history = model.fit(
 )
 
 # =========================
-# SAVE
+# SAVE MODEL (.h5)
 # =========================
 os.makedirs("models", exist_ok=True)
-model.save("models/emotion_model.keras")
 
-print("Emotion model saved!")
+model.save("models/emotion_model.h5")  
+
+print("Emotion model saved as .h5!")
+
+# =========================
+# OPTIONAL: PLOT
+# =========================
+import matplotlib.pyplot as plt
+
+plt.plot(history.history['accuracy'], label='train_acc')
+plt.plot(history.history['val_accuracy'], label='val_acc')
+plt.legend()
+plt.title("Accuracy")
+plt.show()
