@@ -17,12 +17,12 @@ VAL_PATH = "data/emotion_dataset/test"
 
 IMG_SIZE = 224
 BATCH_SIZE = 32
-EPOCHS = 10
+EPOCHS = 20   # 🔥 Increased
 
 # =========================
 # 🧹 CLEAN DATASET
 # =========================
-print("🔍 Checking dataset...")
+print("Checking dataset...")
 
 for folder in [TRAIN_PATH, VAL_PATH]:
     for root, dirs, files in os.walk(folder):
@@ -32,21 +32,22 @@ for folder in [TRAIN_PATH, VAL_PATH]:
                 img = Image.open(path)
                 img.verify()
             except:
-                print("❌ Removing:", path)
+                print("Removing:", path)
                 os.remove(path)
 
-print("✅ Dataset clean!")
+print("Dataset clean!")
 
 # =========================
-# DATA GENERATORS
+# DATA GENERATORS (UPGRADED)
 # =========================
 train_datagen = ImageDataGenerator(
     rescale=1./255,
-    rotation_range=20,
-    zoom_range=0.2,
-    width_shift_range=0.1,
-    height_shift_range=0.1,
-    horizontal_flip=True
+    rotation_range=25,
+    zoom_range=0.25,
+    width_shift_range=0.15,
+    height_shift_range=0.15,
+    horizontal_flip=True,
+    brightness_range=[0.7, 1.3]
 )
 
 val_datagen = ImageDataGenerator(rescale=1./255)
@@ -78,14 +79,14 @@ class_weights = compute_class_weight(
 
 class_weights = dict(enumerate(class_weights))
 
-# Optional: cap extreme imbalance
+# Cap extreme imbalance (important)
 for k in class_weights:
     class_weights[k] = min(class_weights[k], 5.0)
 
 print("Class Weights:", class_weights)
 
 # =========================
-# MODEL
+# MODEL (FINE-TUNED)
 # =========================
 base_model = MobileNetV2(
     input_shape=(IMG_SIZE, IMG_SIZE, 3),
@@ -93,24 +94,31 @@ base_model = MobileNetV2(
     weights="imagenet"
 )
 
-# Freeze most layers
-for layer in base_model.layers[:-20]:
+#  Unfreeze more layers
+for layer in base_model.layers[:-50]:
     layer.trainable = False
 
-# Head
+# =========================
+# STRONGER HEAD
+# =========================
 x = base_model.output
 x = GlobalAveragePooling2D()(x)
+
+x = Dense(512, activation="relu")(x)
+x = Dropout(0.6)(x)
+
 x = Dense(256, activation="relu")(x)
-x = Dropout(0.5)(x)
-output = Dense(7, activation="softmax")(x)  # ✅ FIXED
+x = Dropout(0.4)(x)
+
+output = Dense(7, activation="softmax")(x)
 
 model = Model(inputs=base_model.input, outputs=output)
 
 # =========================
-# COMPILE
+# COMPILE (LOW LR)
 # =========================
 model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
+    optimizer=tf.keras.optimizers.Adam(learning_rate=5e-5),  # 🔥 Lower LR
     loss="categorical_crossentropy",
     metrics=["accuracy"]
 )
@@ -123,13 +131,13 @@ model.summary()
 callbacks = [
     EarlyStopping(
         monitor="val_loss",
-        patience=3,
+        patience=5,
         restore_best_weights=True
     ),
     ReduceLROnPlateau(
         monitor="val_loss",
         factor=0.3,
-        patience=2
+        patience=3
     )
 ]
 
@@ -145,13 +153,12 @@ history = model.fit(
 )
 
 # =========================
-# SAVE MODEL (.h5)
+# SAVE (.h5)
 # =========================
 os.makedirs("models", exist_ok=True)
+model.save("models/emotion_model.h5")
 
-model.save("models/emotion_model.h5")  
-
-print("Emotion model saved as .h5!")
+print("✅ Emotion model saved (H5)!")
 
 # =========================
 # OPTIONAL: PLOT
