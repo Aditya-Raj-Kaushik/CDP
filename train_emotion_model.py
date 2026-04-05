@@ -1,111 +1,122 @@
 import os
+import cv2
 import numpy as np
-import tensorflow as tf
-from tensorflow.keras.preprocessing.image import ImageDataGenerator # type: ignore
-from tensorflow.keras.applications import MobileNetV2 # type: ignore
-from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout # type: ignore
-from tensorflow.keras.models import Model # type: ignore
-from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau # type: ignore
 from sklearn.utils.class_weight import compute_class_weight
-from PIL import Image
+
+import tensorflow as tf
+from tensorflow.keras.preprocessing.image import ImageDataGenerator
+from tensorflow.keras.applications import EfficientNetB0
+from tensorflow.keras.layers import Dense, Dropout, GlobalAveragePooling2D
+from tensorflow.keras.models import Model
+from tensorflow.keras.callbacks import ReduceLROnPlateau, EarlyStopping
 
 # =========================
-# PATHS
+# CONFIG
 # =========================
-TRAIN_PATH = "data/emotion_dataset/train"
-VAL_PATH = "data/emotion_dataset/test"
-
 IMG_SIZE = 224
 BATCH_SIZE = 32
-EPOCHS = 20   # 🔥 Increased
+EPOCHS = 20
+
+TRAIN_DIR = "dataset/train"
+VAL_DIR = "dataset/test"
 
 # =========================
-# 🧹 CLEAN DATASET
+# FACE DETECTION
 # =========================
-print("Checking dataset...")
+face_cascade = cv2.CascadeClassifier(
+    cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+)
 
-for folder in [TRAIN_PATH, VAL_PATH]:
-    for root, dirs, files in os.walk(folder):
-        for file in files:
-            path = os.path.join(root, file)
-            try:
-                img = Image.open(path)
-                img.verify()
-            except:
-                print("Removing:", path)
-                os.remove(path)
+def crop_face(img):
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
-print("Dataset clean!")
+    if len(faces) > 0:
+        x, y, w, h = faces[0]
+        img = img[y:y+h, x:x+w]
+
+    return img
+
 
 # =========================
-# DATA GENERATORS (UPGRADED)
+# PREPROCESS FUNCTION (FIXED)
+# =========================
+def preprocess(img):
+    img = crop_face(img)
+    img = cv2.resize(img, (IMG_SIZE, IMG_SIZE))
+
+    # 🔥 FIX: dtype + normalization
+    img = img.astype("float32") / 255.0
+
+    return img
+
+
+# =========================
+# DATA GENERATORS
 # =========================
 train_datagen = ImageDataGenerator(
-    rescale=1./255,
+    preprocessing_function=preprocess,
     rotation_range=25,
-    zoom_range=0.25,
+    zoom_range=0.3,
     width_shift_range=0.15,
     height_shift_range=0.15,
     horizontal_flip=True,
     brightness_range=[0.7, 1.3]
 )
 
-val_datagen = ImageDataGenerator(rescale=1./255)
+val_datagen = ImageDataGenerator(
+    preprocessing_function=preprocess
+)
 
-train_data = train_datagen.flow_from_directory(
-    TRAIN_PATH,
+train_generator = train_datagen.flow_from_directory(
+    TRAIN_DIR,
     target_size=(IMG_SIZE, IMG_SIZE),
     batch_size=BATCH_SIZE,
     class_mode="categorical"
 )
 
-val_data = val_datagen.flow_from_directory(
-    VAL_PATH,
+val_generator = val_datagen.flow_from_directory(
+    VAL_DIR,
     target_size=(IMG_SIZE, IMG_SIZE),
     batch_size=BATCH_SIZE,
     class_mode="categorical"
 )
 
-print("Classes:", train_data.class_indices)
+print("Classes:", train_generator.class_indices)
+
 
 # =========================
-# CLASS WEIGHTS
+# CLASS WEIGHTS (BALANCE DATA)
 # =========================
+labels = train_generator.classes
 class_weights = compute_class_weight(
     class_weight="balanced",
-    classes=np.unique(train_data.classes),
-    y=train_data.classes
+    classes=np.unique(labels),
+    y=labels
 )
 
 class_weights = dict(enumerate(class_weights))
-
-# Cap extreme imbalance (important)
-for k in class_weights:
-    class_weights[k] = min(class_weights[k], 5.0)
-
 print("Class Weights:", class_weights)
 
+
 # =========================
-# MODEL (FINE-TUNED)
+# MODEL (TRANSFER LEARNING)
 # =========================
-base_model = MobileNetV2(
-    input_shape=(IMG_SIZE, IMG_SIZE, 3),
+base_model = EfficientNetB0(
+    weights="imagenet",
     include_top=False,
-    weights="imagenet"
+    input_shape=(IMG_SIZE, IMG_SIZE, 3)
 )
 
-#  Unfreeze more layers
-for layer in base_model.layers[:-50]:
+# Freeze most layers initially
+for layer in base_model.layers[:-20]:
     layer.trainable = False
 
-# =========================
-# STRONGER HEAD
-# =========================
 x = base_model.output
 x = GlobalAveragePooling2D()(x)
 
 x = Dense(512, activation="relu")(x)
-x = Dropout(0.6)(x)
+x = Dropout(0.5)(x)
 
 x = Dense(256, activation="relu")(x)
 x = Dropout(0.4)(x)
@@ -114,59 +125,52 @@ output = Dense(7, activation="softmax")(x)
 
 model = Model(inputs=base_model.input, outputs=output)
 
+
 # =========================
-# COMPILE (LOW LR)
+# COMPILE
 # =========================
 model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=5e-5),  # 🔥 Lower LR
+    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
     loss="categorical_crossentropy",
     metrics=["accuracy"]
 )
 
 model.summary()
 
+
 # =========================
 # CALLBACKS
 # =========================
-callbacks = [
-    EarlyStopping(
-        monitor="val_loss",
-        patience=5,
-        restore_best_weights=True
-    ),
-    ReduceLROnPlateau(
-        monitor="val_loss",
-        factor=0.3,
-        patience=3
-    )
-]
+reduce_lr = ReduceLROnPlateau(
+    monitor="val_loss",
+    factor=0.3,
+    patience=3,
+    min_lr=1e-6,
+    verbose=1
+)
+
+early_stop = EarlyStopping(
+    monitor="val_loss",
+    patience=6,
+    restore_best_weights=True
+)
+
 
 # =========================
 # TRAIN
 # =========================
 history = model.fit(
-    train_data,
-    validation_data=val_data,
+    train_generator,
+    validation_data=val_generator,
     epochs=EPOCHS,
     class_weight=class_weights,
-    callbacks=callbacks
+    callbacks=[reduce_lr, early_stop]
 )
 
-# =========================
-# SAVE (.h5)
-# =========================
-os.makedirs("models", exist_ok=True)
-model.save("models/emotion_model.h5")
-
-print("✅ Emotion model saved (H5)!")
 
 # =========================
-# OPTIONAL: PLOT
+# SAVE MODEL (.h5)
 # =========================
-import matplotlib.pyplot as plt
+model.save("emotion_model.h5")
 
-plt.plot(history.history['accuracy'], label='train_acc')
-plt.plot(history.history['val_accuracy'], label='val_acc')
-plt.legend()
-plt.title("Accuracy")
-plt.show()
+print("✅ Emotion model saved as emotion_model.h5")
