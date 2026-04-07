@@ -1,112 +1,125 @@
 import os
 import numpy as np
 import tensorflow as tf
-
-from sklearn.utils.class_weight import compute_class_weight
-
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
-from tensorflow.keras.applications import EfficientNetB0
-from tensorflow.keras.applications.efficientnet import preprocess_input
-from tensorflow.keras.layers import Dense, Dropout, GlobalAveragePooling2D
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
 from tensorflow.keras.models import Model
-from tensorflow.keras.callbacks import ReduceLROnPlateau, EarlyStopping, ModelCheckpoint
+from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+from sklearn.utils.class_weight import compute_class_weight
+from PIL import Image
 
 # =========================
-# CONFIG
+# PATHS
 # =========================
+TRAIN_PATH = "data/emotion_dataset/train"
+VAL_PATH = "data/emotion_dataset/test"
+
 IMG_SIZE = 224
 BATCH_SIZE = 32
-
-TRAIN_DIR = "data/emotion_dataset/train/"
-VAL_DIR = "data/emotion_dataset/test/"
+EPOCHS = 20   # 🔥 Increased
 
 # =========================
-# PREPROCESS FUNCTION
+# 🧹 CLEAN DATASET
 # =========================
-def preprocess(img):
-    img = preprocess_input(img)   # EfficientNet-specific normalization
-    return img
+print("🔍 Checking dataset...")
+
+for folder in [TRAIN_PATH, VAL_PATH]:
+    for root, dirs, files in os.walk(folder):
+        for file in files:
+            path = os.path.join(root, file)
+            try:
+                img = Image.open(path)
+                img.verify()
+            except:
+                print("❌ Removing:", path)
+                os.remove(path)
+
+print("✅ Dataset clean!")
 
 # =========================
-# DATA GENERATORS
+# DATA GENERATORS (UPGRADED)
 # =========================
 train_datagen = ImageDataGenerator(
-    preprocessing_function=preprocess,
-    rotation_range=30,
-    zoom_range=0.3,
-    width_shift_range=0.2,
-    height_shift_range=0.2,
-    shear_range=0.15,
+    rescale=1./255,
+    rotation_range=25,
+    zoom_range=0.25,
+    width_shift_range=0.15,
+    height_shift_range=0.15,
     horizontal_flip=True,
-    brightness_range=[0.6, 1.4]
+    brightness_range=[0.7, 1.3]
 )
 
-val_datagen = ImageDataGenerator(
-    preprocessing_function=preprocess
-)
+val_datagen = ImageDataGenerator(rescale=1./255)
 
-train_generator = train_datagen.flow_from_directory(
-    TRAIN_DIR,
+train_data = train_datagen.flow_from_directory(
+    TRAIN_PATH,
     target_size=(IMG_SIZE, IMG_SIZE),
     batch_size=BATCH_SIZE,
     class_mode="categorical"
 )
 
-val_generator = val_datagen.flow_from_directory(
-    VAL_DIR,
+val_data = val_datagen.flow_from_directory(
+    VAL_PATH,
     target_size=(IMG_SIZE, IMG_SIZE),
     batch_size=BATCH_SIZE,
     class_mode="categorical"
 )
 
-print("Classes:", train_generator.class_indices)
+print("Classes:", train_data.class_indices)
 
 # =========================
 # CLASS WEIGHTS
 # =========================
-labels = train_generator.classes
-
 class_weights = compute_class_weight(
     class_weight="balanced",
-    classes=np.unique(labels),
-    y=labels
+    classes=np.unique(train_data.classes),
+    y=train_data.classes
 )
 
 class_weights = dict(enumerate(class_weights))
+
+# Cap extreme imbalance (important)
+for k in class_weights:
+    class_weights[k] = min(class_weights[k], 5.0)
+
 print("Class Weights:", class_weights)
 
 # =========================
-# MODEL
+# MODEL (FINE-TUNED)
 # =========================
-base_model = EfficientNetB0(
-    weights="imagenet",
+base_model = MobileNetV2(
+    input_shape=(IMG_SIZE, IMG_SIZE, 3),
     include_top=False,
-    input_shape=(IMG_SIZE, IMG_SIZE, 3)
+    weights="imagenet"
 )
 
-# Phase 1: Freeze entire base
-for layer in base_model.layers:
+# 🔥 Unfreeze more layers
+for layer in base_model.layers[:-50]:
     layer.trainable = False
 
+# =========================
+# STRONGER HEAD
+# =========================
 x = base_model.output
 x = GlobalAveragePooling2D()(x)
 
-x = Dense(256, activation="relu")(x)
-x = Dropout(0.5)(x)
+x = Dense(512, activation="relu")(x)
+x = Dropout(0.6)(x)
 
-x = Dense(128, activation="relu")(x)
-x = Dropout(0.3)(x)
+x = Dense(256, activation="relu")(x)
+x = Dropout(0.4)(x)
 
 output = Dense(7, activation="softmax")(x)
 
 model = Model(inputs=base_model.input, outputs=output)
 
 # =========================
-# COMPILE (PHASE 1)
+# COMPILE (LOW LR)
 # =========================
 model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-3),
-    loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
+    optimizer=tf.keras.optimizers.Adam(learning_rate=5e-5),  # 🔥 Lower LR
+    loss="categorical_crossentropy",
     metrics=["accuracy"]
 )
 
@@ -116,65 +129,44 @@ model.summary()
 # CALLBACKS
 # =========================
 callbacks = [
-    ReduceLROnPlateau(
-        monitor="val_accuracy",
-        factor=0.2,
-        patience=2,
-        min_lr=1e-6,
-        verbose=1
-    ),
     EarlyStopping(
-        monitor="val_accuracy",
+        monitor="val_loss",
         patience=5,
         restore_best_weights=True
     ),
-    ModelCheckpoint(
-        "best_emotion_model.h5",
-        monitor="val_accuracy",
-        save_best_only=True,
-        verbose=1
+    ReduceLROnPlateau(
+        monitor="val_loss",
+        factor=0.3,
+        patience=3
     )
 ]
 
 # =========================
-# TRAIN PHASE 1
+# TRAIN
 # =========================
-print("\n🚀 Phase 1: Training top layers...\n")
-
-history1 = model.fit(
-    train_generator,
-    validation_data=val_generator,
-    epochs=10,
+history = model.fit(
+    train_data,
+    validation_data=val_data,
+    epochs=EPOCHS,
     class_weight=class_weights,
     callbacks=callbacks
 )
 
 # =========================
-# PHASE 2: FINE-TUNING
+# SAVE (.h5)
 # =========================
-print("\n🔥 Phase 2: Fine-tuning deeper layers...\n")
+os.makedirs("models", exist_ok=True)
+model.save("models/emotion_model.h5")
 
-for layer in base_model.layers[-100:]:
-    layer.trainable = True
-
-model.compile(
-    optimizer=tf.keras.optimizers.Adam(learning_rate=1e-5),
-    loss=tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
-    metrics=["accuracy"]
-)
-
-history2 = model.fit(
-    train_generator,
-    validation_data=val_generator,
-    epochs=25,
-    class_weight=class_weights,
-    callbacks=callbacks
-)
+print("✅ Emotion model saved (H5)!")
 
 # =========================
-# SAVE FINAL MODEL
+# OPTIONAL: PLOT
 # =========================
-model.save("final_emotion_model.h5")
+import matplotlib.pyplot as plt
 
-print("\n✅ Training complete!")
-print("Saved as: final_emotion_model.h5")
+plt.plot(history.history['accuracy'], label='train_acc')
+plt.plot(history.history['val_accuracy'], label='val_acc')
+plt.legend()
+plt.title("Accuracy")
+plt.show()

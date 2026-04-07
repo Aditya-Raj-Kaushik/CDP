@@ -1,23 +1,48 @@
 import cv2
 import numpy as np
 import os
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
+import tensorflow as tf
 
-model = Sequential([
-    Conv2D(32, (3,3), activation='relu', input_shape=(224,224,3)),
-    MaxPooling2D(),
-    Conv2D(64, (3,3), activation='relu'),
-    MaxPooling2D(),
-    Flatten(),
-    Dense(128, activation='relu'),
-    Dense(7, activation='softmax')
-])
+from tensorflow.keras.applications import MobileNetV2
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
+from tensorflow.keras.models import Model
 
+# =========================
+# REBUILD MODEL (EXACT SAME)
+# =========================
+base_model = MobileNetV2(
+    input_shape=(224, 224, 3),
+    include_top=False,
+    weights=None   # IMPORTANT
+)
+
+# Match your training freeze
+for layer in base_model.layers[:-50]:
+    layer.trainable = False
+
+x = base_model.output
+x = GlobalAveragePooling2D()(x)
+
+x = Dense(512, activation="relu")(x)
+x = Dropout(0.6)(x)
+
+x = Dense(256, activation="relu")(x)
+x = Dropout(0.4)(x)
+
+output = Dense(7, activation="softmax")(x)
+
+model = Model(inputs=base_model.input, outputs=output)
+
+# =========================
+# LOAD WEIGHTS
+# =========================
 model.load_weights(os.path.join("models", "emotion_model.h5"))
 
 emotion_labels = ["Angry", "Disgust", "Fear", "Happy", "Sad", "Surprise", "Neutral"]
 
+# =========================
+# PREDICTION
+# =========================
 def predict_emotion(face):
     img = cv2.resize(face, (224, 224))
     img = img.astype("float32") / 255.0
