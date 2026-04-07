@@ -3,9 +3,9 @@ import numpy as np
 import os
 import tensorflow as tf
 
-from tensorflow.keras.applications import MobileNetV2
-from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
-from tensorflow.keras.models import Model
+from tensorflow.keras.applications import MobileNetV2 # type: ignore
+from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout # type: ignore
+from tensorflow.keras.models import Model # type: ignore
 
 # =========================
 # REBUILD MODEL (EXACT SAME)
@@ -45,4 +45,4 @@ def predict_mask(face):
 
     pred = model.predict(img, verbose=0)[0][0]
 
-    return "Mask" if pred > 0.5 else "No Mask"
+    return "Mask" if pred < 0.5 else "No Mask"
