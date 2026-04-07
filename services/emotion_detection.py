@@ -1,15 +1,25 @@
-import numpy as np
 import cv2
-from tensorflow.keras.models import load_model
+import numpy as np
 import os
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
 
-MODEL_PATH = os.path.join("models", "emotion_model.h5")
-model = load_model(MODEL_PATH)
+model = Sequential([
+    Conv2D(32, (3,3), activation='relu', input_shape=(224,224,3)),
+    MaxPooling2D(),
+    Conv2D(64, (3,3), activation='relu'),
+    MaxPooling2D(),
+    Flatten(),
+    Dense(128, activation='relu'),
+    Dense(7, activation='softmax')
+])
+
+model.load_weights(os.path.join("models", "emotion_model.h5"))
 
 emotion_labels = ["Angry", "Disgust", "Fear", "Happy", "Sad", "Surprise", "Neutral"]
 
 def predict_emotion(face):
-    img = cv2.resize(face, (224, 224))  # ensure same as training
+    img = cv2.resize(face, (224, 224))
     img = img.astype("float32") / 255.0
     img = np.expand_dims(img, axis=0)
 
