@@ -1,14 +1,17 @@
-import tensorflow as tf
-from tensorflow.keras.models import load_model
+import os
+os.environ["TF_USE_LEGACY_KERAS"] = "1"
 import numpy as np
+import cv2
+from tensorflow.keras.models import load_model
 
-model = load_model("models/mask_model.h5")
+MODEL_PATH = os.path.join("models", "mask_model.h5")
+model = load_model(MODEL_PATH)
 
-def predict_mask(face_img):
-    face = cv2.resize(face_img, (224, 224))
-    face = face / 255.0
-    face = np.reshape(face, (1, 224, 224, 3))
-    
-    pred = model.predict(face)[0]
-    
-    return "Mask" if pred[0] > 0.5 else "No Mask"
+def predict_mask(face):
+    img = cv2.resize(face, (224, 224))
+    img = img.astype("float32") / 255.0
+    img = np.expand_dims(img, axis=0)
+
+    pred = model.predict(img, verbose=0)[0]
+
+    return "Mask" if pred[0] > pred[1] else "No Mask"

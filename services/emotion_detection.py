@@ -1,16 +1,17 @@
-import cv2
 import numpy as np
-from tensorflow.keras.models import load_model # type: ignore
+import cv2
+from tensorflow.keras.models import load_model
+import os
 
-model = load_model("models/emotion_model.h5")
+MODEL_PATH = os.path.join("models", "emotion_model.h5")
+model = load_model(MODEL_PATH)
 
-EMOTIONS = ["Angry","Disgust","Fear","Happy","Sad","Surprise","Neutral"]
+emotion_labels = ["Angry", "Disgust", "Fear", "Happy", "Sad", "Surprise", "Neutral"]
 
-def predict_emotion(face_img):
-    gray = cv2.cvtColor(face_img, cv2.COLOR_BGR2GRAY)
-    face = cv2.resize(gray, (48,48))
-    face = face / 255.0
-    face = np.reshape(face, (1,48,48,1))
-    
-    pred = model.predict(face)[0]
-    return EMOTIONS[np.argmax(pred)]
+def predict_emotion(face):
+    img = cv2.resize(face, (224, 224))  # ensure same as training
+    img = img.astype("float32") / 255.0
+    img = np.expand_dims(img, axis=0)
+
+    pred = model.predict(img, verbose=0)[0]
+    return emotion_labels[np.argmax(pred)]
