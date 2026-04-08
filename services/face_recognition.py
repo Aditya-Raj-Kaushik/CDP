@@ -1,36 +1,22 @@
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
+
 import cv2
 import numpy as np
-import os
+from keras_facenet import FaceNet
 
-from tensorflow.keras.applications import MobileNetV2
-from tensorflow.keras.applications.mobilenet_v2 import preprocess_input
-from tensorflow.keras.models import Model
-from tensorflow.keras.layers import GlobalAveragePooling2D
+embedder = FaceNet()
 
-# =========================
-# MODEL (FEATURE EXTRACTOR)
-# =========================
-base_model = MobileNetV2(
-    input_shape=(224,224,3),
-    include_top=False,
-    weights="imagenet"
-)
-
-x = base_model.output
-x = GlobalAveragePooling2D()(x)
-
-model = Model(inputs=base_model.input, outputs=x)
-
-# =========================
-# LOAD KNOWN FACES
-# =========================
 DATASET_PATH = "data/known"
 
 known_embeddings = []
 known_labels = []
 
-def load_known_faces():
-    print("🔍 Loading known faces...")
+# =========================
+# LOAD FACES
+# =========================
+def load_faces():
+    print("Loading known faces...")
 
     for person in os.listdir(DATASET_PATH):
         person_path = os.path.join(DATASET_PATH, person)
@@ -45,40 +31,35 @@ def load_known_faces():
             if img is None:
                 continue
 
-            img = cv2.resize(img, (224,224))
-            img = preprocess_input(img)
-            img = np.expand_dims(img, axis=0)
-
-            embedding = model.predict(img, verbose=0)[0]
+            img = cv2.resize(img, (160, 160))
+            embedding = embedder.embeddings([img])[0]
 
             known_embeddings.append(embedding)
             known_labels.append(person)
 
-    print(f"✅ Loaded {len(known_embeddings)} faces")
+    print(f"Loaded {len(known_embeddings)} faces")
 
-load_known_faces()
+load_faces()
 
-# =========================
-# RECOGNITION FUNCTION
-# =========================
+def cosine_similarity(a, b):
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+
 def recognize_face(face):
-    img = cv2.resize(face, (224,224))
-    img = preprocess_input(img)
-    img = np.expand_dims(img, axis=0)
+    face = cv2.resize(face, (160, 160))
+    embedding = embedder.embeddings([face])[0]
 
-    embedding = model.predict(img, verbose=0)[0]
-
-    min_dist = float("inf")
+    best_score = -1
     identity = "Unknown"
 
     for known_emb, label in zip(known_embeddings, known_labels):
-        dist = np.linalg.norm(embedding - known_emb)
+        score = cosine_similarity(embedding, known_emb)
 
-        if dist < min_dist:
-            min_dist = dist
+        if score > best_score:
+            best_score = score
             identity = label
 
-    if min_dist < 12:
-        return f"{identity} ({min_dist:.2f})"
+    if best_score > 0.55:
+        return f"{identity} ({best_score:.2f})"
     else:
-        return f"Unknown ({min_dist:.2f})"
+        return f"Unknown ({best_score:.2f})"

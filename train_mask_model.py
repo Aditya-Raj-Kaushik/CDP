@@ -15,7 +15,7 @@ BATCH_SIZE = 32
 EPOCHS = 5
 
 
-print("🔍 Checking dataset...")
+print(" Checking dataset...")
 
 for root, dirs, files in os.walk(DATASET_PATH):
     for file in files:
@@ -76,9 +76,7 @@ output = Dense(1, activation="sigmoid")(x)
 
 model = Model(inputs=base_model.input, outputs=output)
 
-# =========================
-# COMPILE
-# =========================
+
 model.compile(
     optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),
     loss="binary_crossentropy",

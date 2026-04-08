@@ -6,7 +6,7 @@ face_cascade = cv2.CascadeClassifier(
 
 def detect_faces(frame):
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    
+
     faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
     results = []
