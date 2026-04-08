@@ -7,16 +7,13 @@ from tensorflow.keras.applications import MobileNetV2 # type: ignore
 from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout # type: ignore
 from tensorflow.keras.models import Model # type: ignore
 
-# =========================
-# REBUILD MODEL (EXACT SAME)
-# =========================
+
 base_model = MobileNetV2(
     input_shape=(224, 224, 3),
     include_top=False,
     weights=None   # IMPORTANT
 )
 
-# Match your training freeze
 for layer in base_model.layers[:-20]:
     layer.trainable = False
 
@@ -30,14 +27,8 @@ output = Dense(1, activation="sigmoid")(x)  # IMPORTANT
 
 model = Model(inputs=base_model.input, outputs=output)
 
-# =========================
-# LOAD WEIGHTS
-# =========================
 model.load_weights(os.path.join("models", "mask_model.h5"))
 
-# =========================
-# PREDICTION
-# =========================
 def predict_mask(face):
     img = cv2.resize(face, (224, 224))
     img = img.astype("float32") / 255.0

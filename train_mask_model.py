@@ -7,18 +7,14 @@ from tensorflow.keras.models import Model # type: ignore
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau # type: ignore
 from PIL import Image
 
-# =========================
-# PATH
-# =========================
+
 DATASET_PATH = "data/mask_dataset"
 
 IMG_SIZE = 224
 BATCH_SIZE = 32
 EPOCHS = 5
 
-# =========================
-# 🧹 CLEAN CORRUPTED IMAGES
-# =========================
+
 print("🔍 Checking dataset...")
 
 for root, dirs, files in os.walk(DATASET_PATH):
@@ -28,14 +24,12 @@ for root, dirs, files in os.walk(DATASET_PATH):
             img = Image.open(file_path)
             img.verify()
         except:
-            print("❌ Removing corrupted:", file_path)
+            print("Removing corrupted:", file_path)
             os.remove(file_path)
 
-print("✅ Dataset clean!")
+print("Dataset clean!")
 
-# =========================
-# DATA GENERATOR (FIXED)
-# =========================
+
 datagen = ImageDataGenerator(
     rescale=1./255,
     validation_split=0.2,
@@ -46,7 +40,6 @@ datagen = ImageDataGenerator(
     brightness_range=[0.7, 1.3]
 )
 
-# TRAIN
 train_data = datagen.flow_from_directory(
     DATASET_PATH,
     target_size=(IMG_SIZE, IMG_SIZE),
@@ -55,7 +48,6 @@ train_data = datagen.flow_from_directory(
     class_mode="binary"
 )
 
-# VALIDATION (same generator!)
 val_data = datagen.flow_from_directory(
     DATASET_PATH,
     target_size=(IMG_SIZE, IMG_SIZE),
@@ -66,20 +58,16 @@ val_data = datagen.flow_from_directory(
 
 print("Classes:", train_data.class_indices)
 
-# =========================
-# MODEL
-# =========================
+
 base_model = MobileNetV2(
     input_shape=(IMG_SIZE, IMG_SIZE, 3),
     include_top=False,
     weights="imagenet"
 )
 
-# Freeze most layers
 for layer in base_model.layers[:-20]:
     layer.trainable = False
 
-# Custom head
 x = base_model.output
 x = GlobalAveragePooling2D()(x)
 x = Dense(128, activation="relu")(x)
@@ -99,9 +87,6 @@ model.compile(
 
 model.summary()
 
-# =========================
-# CALLBACKS
-# =========================
 callbacks = [
     EarlyStopping(
         monitor="val_loss",
@@ -115,9 +100,6 @@ callbacks = [
     )
 ]
 
-# =========================
-# TRAIN
-# =========================
 history = model.fit(
     train_data,
     validation_data=val_data,
@@ -125,17 +107,11 @@ history = model.fit(
     callbacks=callbacks
 )
 
-# =========================
-# SAVE MODEL
-# =========================
 os.makedirs("models", exist_ok=True)
 model.save("models/mask_model.h5")
 
-print("✅ Mask model trained and saved successfully!")
+print("Mask model trained and saved successfully!")
 
-# =========================
-# OPTIONAL: PLOT RESULTS
-# =========================
 import matplotlib.pyplot as plt
 
 plt.plot(history.history['accuracy'], label='train_accuracy')

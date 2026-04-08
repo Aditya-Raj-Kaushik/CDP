@@ -9,20 +9,15 @@ from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from sklearn.utils.class_weight import compute_class_weight
 from PIL import Image
 
-# =========================
-# PATHS
-# =========================
+
 TRAIN_PATH = "data/emotion_dataset/train"
 VAL_PATH = "data/emotion_dataset/test"
 
 IMG_SIZE = 224
 BATCH_SIZE = 32
-EPOCHS = 20   # 🔥 Increased
+EPOCHS = 20   
 
-# =========================
-# 🧹 CLEAN DATASET
-# =========================
-print("🔍 Checking dataset...")
+print("Checking dataset...")
 
 for folder in [TRAIN_PATH, VAL_PATH]:
     for root, dirs, files in os.walk(folder):
@@ -32,14 +27,12 @@ for folder in [TRAIN_PATH, VAL_PATH]:
                 img = Image.open(path)
                 img.verify()
             except:
-                print("❌ Removing:", path)
+                print("Removing:", path)
                 os.remove(path)
 
-print("✅ Dataset clean!")
+print("Dataset clean!")
 
-# =========================
-# DATA GENERATORS (UPGRADED)
-# =========================
+
 train_datagen = ImageDataGenerator(
     rescale=1./255,
     rotation_range=25,
@@ -68,9 +61,6 @@ val_data = val_datagen.flow_from_directory(
 
 print("Classes:", train_data.class_indices)
 
-# =========================
-# CLASS WEIGHTS
-# =========================
 class_weights = compute_class_weight(
     class_weight="balanced",
     classes=np.unique(train_data.classes),
@@ -79,28 +69,22 @@ class_weights = compute_class_weight(
 
 class_weights = dict(enumerate(class_weights))
 
-# Cap extreme imbalance (important)
 for k in class_weights:
     class_weights[k] = min(class_weights[k], 5.0)
 
 print("Class Weights:", class_weights)
 
-# =========================
-# MODEL (FINE-TUNED)
-# =========================
+
 base_model = MobileNetV2(
     input_shape=(IMG_SIZE, IMG_SIZE, 3),
     include_top=False,
     weights="imagenet"
 )
 
-# 🔥 Unfreeze more layers
+
 for layer in base_model.layers[:-50]:
     layer.trainable = False
 
-# =========================
-# STRONGER HEAD
-# =========================
 x = base_model.output
 x = GlobalAveragePooling2D()(x)
 
@@ -114,9 +98,7 @@ output = Dense(7, activation="softmax")(x)
 
 model = Model(inputs=base_model.input, outputs=output)
 
-# =========================
-# COMPILE (LOW LR)
-# =========================
+
 model.compile(
     optimizer=tf.keras.optimizers.Adam(learning_rate=5e-5),  # 🔥 Lower LR
     loss="categorical_crossentropy",
@@ -125,9 +107,7 @@ model.compile(
 
 model.summary()
 
-# =========================
-# CALLBACKS
-# =========================
+
 callbacks = [
     EarlyStopping(
         monitor="val_loss",
@@ -141,9 +121,7 @@ callbacks = [
     )
 ]
 
-# =========================
-# TRAIN
-# =========================
+
 history = model.fit(
     train_data,
     validation_data=val_data,
@@ -152,17 +130,12 @@ history = model.fit(
     callbacks=callbacks
 )
 
-# =========================
-# SAVE (.h5)
-# =========================
 os.makedirs("models", exist_ok=True)
 model.save("models/emotion_model.h5")
 
-print("✅ Emotion model saved (H5)!")
+print("Emotion model saved (H5)!")
 
-# =========================
-# OPTIONAL: PLOT
-# =========================
+
 import matplotlib.pyplot as plt
 
 plt.plot(history.history['accuracy'], label='train_acc')

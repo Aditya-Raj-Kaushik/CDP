@@ -7,16 +7,13 @@ from tensorflow.keras.applications import MobileNetV2
 from tensorflow.keras.layers import Dense, GlobalAveragePooling2D, Dropout
 from tensorflow.keras.models import Model
 
-# =========================
-# REBUILD MODEL (EXACT SAME)
-# =========================
+
 base_model = MobileNetV2(
     input_shape=(224, 224, 3),
     include_top=False,
-    weights=None   # IMPORTANT
+    weights=None   
 )
 
-# Match your training freeze
 for layer in base_model.layers[:-50]:
     layer.trainable = False
 
@@ -33,16 +30,11 @@ output = Dense(7, activation="softmax")(x)
 
 model = Model(inputs=base_model.input, outputs=output)
 
-# =========================
-# LOAD WEIGHTS
-# =========================
+
 model.load_weights(os.path.join("models", "emotion_model.h5"))
 
 emotion_labels = ["Angry", "Disgust", "Fear", "Happy", "Sad", "Surprise", "Neutral"]
 
-# =========================
-# PREDICTION
-# =========================
 def predict_emotion(face):
     img = cv2.resize(face, (224, 224))
     img = img.astype("float32") / 255.0
